@@ -1,1 +1,14 @@
-/node_modules
+node_modules/
+*.log
+java_error_in_studio*.log
+mumu_boot.txt
+*.ipynb
+ntuser.dat*
+npx
+py
+useruid.ini
+.gradle/
+android/app/build/
+android/.idea/
+android/local.properties
+.DS_Store
