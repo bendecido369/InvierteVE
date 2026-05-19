@@ -1,0 +1,7 @@
+{
+  "android": {
+    "adaptiveIcon": {
+      "backgroundColor": "#00000000"
+    }
+  }
+}

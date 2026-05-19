@@ -1,0 +1,9 @@
+{
+  "appId": "com.invierteEnVenezuela.app",
+  "appName": "invierteEnVenezuela",
+  "webDir": "www",
+  "server": {
+    "url": "https://rosybrown-lyrebird-820914.hostingersite.com",
+    "cleartext": true
+  }
+}
