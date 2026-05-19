@@ -1,0 +1,398 @@
+/**
+ * InvierteEnVenezuela — main.js v2.0
+ */
+(function () {
+  'use strict';
+
+  /* ── Header scroll ── */
+  const header = document.getElementById('iev-header');
+  if (header) {
+    window.addEventListener('scroll', () => {
+      header.classList.toggle('scrolled', window.scrollY > 50);
+    }, { passive: true });
+  }
+
+  /* ── Mobile menu ── */
+  const toggle    = document.getElementById('iev-mobile-toggle');
+  const mobileNav = document.getElementById('iev-mobile-nav');
+  const iconOpen  = document.getElementById('iev-icon-open');
+  const iconClose = document.getElementById('iev-icon-close');
+
+  if (toggle && mobileNav) {
+    toggle.addEventListener('click', () => {
+      const open = mobileNav.classList.toggle('open');
+      toggle.setAttribute('aria-expanded', open);
+      if (iconOpen)  iconOpen.style.display  = open ? 'none' : '';
+      if (iconClose) iconClose.style.display = open ? ''     : 'none';
+    });
+    document.addEventListener('click', (e) => {
+      if (header && !header.contains(e.target) && !mobileNav.contains(e.target)) {
+        mobileNav.classList.remove('open');
+        if (iconOpen)  iconOpen.style.display  = '';
+        if (iconClose) iconClose.style.display = 'none';
+      }
+    });
+  }
+
+  /* ── Scroll reveal ── */
+  if ('IntersectionObserver' in window) {
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); }
+      });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.iev-reveal').forEach(el => obs.observe(el));
+  } else {
+    document.querySelectorAll('.iev-reveal').forEach(el => el.classList.add('visible'));
+  }
+
+  /* ── Active nav link ── */
+  document.querySelectorAll('.iev-nav a, .iev-mobile-nav a').forEach(link => {
+    try {
+      if (link.href === window.location.href ||
+          (window.location.pathname !== '/' && window.location.pathname.startsWith(new URL(link.href).pathname))) {
+        link.classList.add('active');
+      }
+    } catch(e) {}
+  });
+
+  /* ── Toast notifications ── */
+  function ievNotify(msg, type) {
+    type = type || 'success';
+    let wrap = document.getElementById('iev-toasts');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'iev-toasts';
+      wrap.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;display:flex;flex-direction:column;gap:.5rem;pointer-events:none';
+      document.body.appendChild(wrap);
+    }
+    const colors = { success:'#1E4620', error:'#8C1D18', info:'#06271A' };
+    const toast = document.createElement('div');
+    toast.style.cssText = 'background:' + (colors[type]||colors.info) + ';color:#fff;padding:.75rem 1.25rem;border-radius:6px;font-size:.875rem;font-weight:500;max-width:320px;box-shadow:0 4px 16px rgba(0,0,0,.25);opacity:0;transform:translateX(20px);transition:all .3s ease;pointer-events:auto';
+    toast.textContent = msg;
+    wrap.appendChild(toast);
+    requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'none'; });
+    setTimeout(() => {
+      toast.style.opacity = '0'; toast.style.transform = 'translateX(20px)';
+      setTimeout(() => toast.remove(), 300);
+    }, 3500);
+  }
+
+  /* ── Favorites AJAX ── */
+  if (typeof ievAjax !== 'undefined') {
+    document.addEventListener('click', function(e) {
+      const btn = e.target.closest('.iev-favorite-btn');
+      if (!btn) return;
+      e.preventDefault();
+      btn.classList.add('loading');
+      const fd = new FormData();
+      fd.append('action', 'iev_toggle_favorite');
+      fd.append('nonce', ievAjax.nonce);
+      fd.append('project_id', btn.dataset.projectId);
+      fetch(ievAjax.ajaxurl, { method:'POST', body:fd })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) { btn.classList.toggle('is-favorite'); ievNotify(data.data.message, 'success'); }
+          else ievNotify(data.data || ievAjax.strings.error, 'error');
+        })
+        .catch(() => ievNotify(ievAjax.strings.error, 'error'))
+        .finally(() => btn.classList.remove('loading'));
+    });
+  }
+
+  /* ── Contact form AJAX ── */
+  const contactForm = document.getElementById('iev-contact-form');
+  if (contactForm && typeof ievAjax !== 'undefined') {
+    contactForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const btn = contactForm.querySelector('[type="submit"]');
+      const orig = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Enviando…';
+      const fd = new FormData(contactForm);
+      fd.append('action', 'iev_submit_contact');
+      fetch(ievAjax.ajaxurl, { method:'POST', body:fd })
+        .then(r => r.json())
+        .then(data => {
+          ievNotify(data.success ? '¡Mensaje enviado! Te contactaremos pronto.' : (data.data||'Error.'), data.success ? 'success' : 'error');
+          if (data.success) contactForm.reset();
+        })
+        .catch(() => ievNotify('Error de conexión.', 'error'))
+        .finally(() => { btn.disabled = false; btn.textContent = orig; });
+    });
+  }
+
+  /* ── Investment form AJAX ── */
+  /* ── INVERSIÓN + MODAL DE PAGO CON COMPROBANTE ── */
+  const investForm = document.getElementById('iev-investment-form');
+  if (investForm && typeof ievAjax !== 'undefined') {
+    investForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const btn = investForm.querySelector('[type="submit"]');
+      const orig = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Procesando solicitud…';
+      const fd = new FormData(investForm);
+      fd.append('action', 'iev_submit_investment');
+      fd.append('nonce', ievAjax.nonce);
+      fetch(ievAjax.ajaxurl, { method:'POST', body:fd })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            investForm.reset();
+            ievShowPaymentModal(data.data);
+          } else {
+            ievNotify(data.data?.message || data.data || 'Error al procesar. Intenta de nuevo.', 'error');
+          }
+        })
+        .catch(() => ievNotify('Error de conexión. Intenta de nuevo.', 'error'))
+        .finally(() => { btn.disabled = false; btn.textContent = orig; });
+    });
+  }
+
+  /* ── MODAL DE INSTRUCCIONES DE PAGO Y SUBIDA DE COMPROBANTE ── */
+  function ievShowPaymentModal(resp) {
+    const pm = resp.payment_methods || {};
+    const zelle = pm.zelle || {};
+    const bank  = pm.bank  || {};
+    const usdt  = pm.usdt  || {};
+
+    function methodCard(icon, label, fields) {
+      const rows = fields.filter(f=>f.val).map(f=>`<div class="ivv-pm-row"><span class="ivv-pm-label">${f.label}</span><strong class="ivv-pm-val">${f.val}</strong></div>`).join('');
+      if (!rows) return '';
+      return `<div class="ivv-pm-card"><div class="ivv-pm-icon">${icon}</div><div class="ivv-pm-info"><div class="ivv-pm-name">${label}</div>${rows}</div></div>`;
+    }
+
+    const methodsHTML = [
+      methodCard('💚','Zelle',[{label:'Número',val:zelle.phone},{label:'Titular',val:zelle.name}]),
+      methodCard('🏦','Transferencia Bancaria',[{label:'Banco',val:bank.bank},{label:'Titular',val:bank.holder},{label:'Cuenta',val:bank.account},{label:'Routing/IBAN',val:bank.routing}]),
+      methodCard('🔷','USDT TRC20',[{label:'Dirección',val:usdt.wallet}]),
+    ].filter(Boolean).join('');
+
+    const instHTML = pm.instructions ? `<div class="ivv-pm-instructions"><p>${pm.instructions}</p></div>` : '';
+
+    const modal = document.createElement('div');
+    modal.id    = 'ivv-payment-modal';
+    modal.className = 'ivv-modal-overlay';
+    modal.innerHTML = `
+      <div class="ivv-modal-box">
+        <button class="ivv-modal-close" onclick="document.getElementById('ivv-payment-modal').remove()" aria-label="Cerrar">&times;</button>
+        <div id="ivv-pay-step-1">
+          <div class="ivv-modal-header">
+            <div class="ivv-modal-badge">💰 Paso 1 de 2</div>
+            <h3 class="ivv-modal-title">Completa tu pago</h3>
+            <p class="ivv-modal-sub">Transfiere <strong>$${Number(resp.amount).toLocaleString('es-VE',{minimumFractionDigits:2})} USD</strong> a cualquiera de estos métodos:</p>
+          </div>
+          <div class="ivv-pm-list">${methodsHTML || '<p style="color:rgba(255,255,255,.6);text-align:center">El administrador configurará los datos de pago pronto.</p>'}</div>
+          ${instHTML}
+          <button class="ivv-btn-pay-next" onclick="document.getElementById('ivv-pay-step-1').style.display='none';document.getElementById('ivv-pay-step-2').style.display='block'">
+            Ya realicé el pago — Subir comprobante →
+          </button>
+        </div>
+        <div id="ivv-pay-step-2" style="display:none">
+          <div class="ivv-modal-header">
+            <div class="ivv-modal-badge">📎 Paso 2 de 2</div>
+            <h3 class="ivv-modal-title">Sube tu comprobante</h3>
+            <p class="ivv-modal-sub">Sube la foto o PDF de tu recibo de pago para verificar tu inversión.</p>
+          </div>
+          <div class="ivv-receipt-form">
+            <div class="ivv-rf-group">
+              <label class="ivv-rf-label">Método de pago utilizado</label>
+              <select id="ivv-receipt-method" class="ivv-rf-input">
+                <option value="bank">🏦 Transferencia Bancaria</option>
+                <option value="zelle">💚 Zelle</option>
+                <option value="usdt">🔷 USDT TRC20</option>
+              </select>
+            </div>
+            <div class="ivv-rf-group">
+              <label class="ivv-rf-label">Número de referencia / Confirmación <span style="opacity:.6">(opcional)</span></label>
+              <input type="text" id="ivv-receipt-ref" class="ivv-rf-input" placeholder="Ej: 0000123456" />
+            </div>
+            <div class="ivv-rf-group">
+              <label class="ivv-rf-label">Comprobante de pago <span style="color:#ef4444">*</span></label>
+              <div class="ivv-file-drop" id="ivv-file-drop">
+                <input type="file" id="ivv-receipt-file" accept="image/*,.pdf" style="display:none" />
+                <div class="ivv-fd-inner" onclick="document.getElementById('ivv-receipt-file').click()">
+                  <div class="ivv-fd-icon">📄</div>
+                  <div class="ivv-fd-text">Haz clic para seleccionar o arrastra aquí</div>
+                  <div class="ivv-fd-hint">JPG, PNG, PDF — máx. 5MB</div>
+                </div>
+                <div class="ivv-fd-preview" id="ivv-fd-preview" style="display:none"></div>
+              </div>
+            </div>
+            <div class="ivv-progress-bar" id="ivv-upload-progress" style="display:none">
+              <div class="ivv-progress-fill" id="ivv-progress-fill" style="width:0%"></div>
+            </div>
+            <button class="ivv-btn-pay-submit" id="ivv-submit-receipt">
+              Enviar comprobante →
+            </button>
+          </div>
+        </div>
+        <div id="ivv-pay-step-3" style="display:none">
+          <div class="ivv-success-state">
+            <div class="ivv-success-check">✅</div>
+            <h3>¡Comprobante recibido!</h3>
+            <p>Tu inversión en <strong>${resp.project_name || 'el proyecto'}</strong> está en verificación.<br>Recibirás una confirmación por email en <strong>24–48 horas</strong>.</p>
+            <button onclick="document.getElementById('ivv-payment-modal').remove()" class="ivv-btn-pay-next">Entendido</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+
+    // File drop preview
+    const fileInput = document.getElementById('ivv-receipt-file');
+    const fdDrop    = document.getElementById('ivv-file-drop');
+    const fdPreview = document.getElementById('ivv-fd-preview');
+    const fdInner   = fdDrop.querySelector('.ivv-fd-inner');
+    fileInput.addEventListener('change', function() {
+      if (this.files[0]) {
+        fdPreview.textContent = '📎 ' + this.files[0].name;
+        fdPreview.style.display = 'block';
+        fdInner.style.display   = 'none';
+      }
+    });
+    fdDrop.addEventListener('dragover', e => { e.preventDefault(); fdDrop.classList.add('ivv-fd-active'); });
+    fdDrop.addEventListener('dragleave', () => fdDrop.classList.remove('ivv-fd-active'));
+    fdDrop.addEventListener('drop', e => {
+      e.preventDefault(); fdDrop.classList.remove('ivv-fd-active');
+      if (e.dataTransfer.files[0]) {
+        const dt = new DataTransfer(); dt.items.add(e.dataTransfer.files[0]);
+        fileInput.files = dt.files;
+        fileInput.dispatchEvent(new Event('change'));
+      }
+    });
+
+    // Submit receipt
+    document.getElementById('ivv-submit-receipt').addEventListener('click', function() {
+      if (!fileInput.files[0]) { ievNotify('Selecciona un comprobante para continuar.', 'error'); return; }
+      const btn = this;
+      btn.disabled = true; btn.textContent = 'Subiendo comprobante…';
+      const fd2 = new FormData();
+      fd2.append('action', 'iev_upload_receipt');
+      fd2.append('nonce', ievAjax.nonce);
+      fd2.append('investment_id', resp.investment_id);
+      fd2.append('payment_method', document.getElementById('ivv-receipt-method').value);
+      fd2.append('reference_number', document.getElementById('ivv-receipt-ref').value);
+      fd2.append('receipt_file', fileInput.files[0]);
+      const bar  = document.getElementById('ivv-upload-progress');
+      const fill = document.getElementById('ivv-progress-fill');
+      bar.style.display = 'block';
+      const xhr = new XMLHttpRequest();
+      xhr.upload.onprogress = e => { if (e.lengthComputable) fill.style.width = Math.round(e.loaded/e.total*100)+'%'; };
+      xhr.onload = function() {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (data.success) {
+            document.getElementById('ivv-pay-step-2').style.display='none';
+            document.getElementById('ivv-pay-step-3').style.display='block';
+          } else {
+            ievNotify(data.data?.message || 'Error al subir el comprobante.', 'error');
+            btn.disabled = false; btn.textContent = 'Enviar comprobante →';
+            bar.style.display='none';
+          }
+        } catch(err) { ievNotify('Error inesperado.', 'error'); btn.disabled=false; btn.textContent='Enviar comprobante →'; }
+      };
+      xhr.onerror = () => { ievNotify('Error de conexión.','error'); btn.disabled=false; btn.textContent='Enviar comprobante →'; };
+      xhr.open('POST', ievAjax.ajaxurl);
+      xhr.send(fd2);
+    });
+
+    // Close on overlay click
+    modal.addEventListener('click', function(e) { if(e.target===modal) modal.remove(); });
+  }
+
+  /* ── Auto-submit filters on change ── */
+  const filterForm = document.querySelector('.iev-filters');
+  if (filterForm) {
+    filterForm.addEventListener('change', function() {
+      if (filterForm.requestSubmit) filterForm.requestSubmit();
+      else filterForm.submit();
+    });
+  }
+
+  /* ── Animated progress bars on scroll ── */
+  const progressFills = document.querySelectorAll('.iev-progress-fill');
+  if ('IntersectionObserver' in window && progressFills.length) {
+    const progObs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          const el = e.target;
+          const target = el.style.width;
+          el.style.width = '0';
+          requestAnimationFrame(() => {
+            setTimeout(() => { el.style.transition = 'width 1.1s cubic-bezier(.4,0,.2,1)'; el.style.width = target; }, 100);
+          });
+          progObs.unobserve(el);
+        }
+      });
+    }, { threshold: 0.2 });
+    progressFills.forEach(el => progObs.observe(el));
+  }
+
+  /* ── Hero stat counter animation ── */
+  function animateCount(el, from, to, suffix, dur) {
+    const start = performance.now();
+    const isDecimal = String(to).includes('.');
+    const update = (now) => {
+      const p = Math.min((now - start) / dur, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const val = from + (to - from) * eased;
+      el.textContent = (isDecimal ? val.toFixed(1) : Math.round(val)) + suffix;
+      if (p < 1) requestAnimationFrame(update);
+    };
+    requestAnimationFrame(update);
+  }
+  const heroStats = document.querySelectorAll('.iev-hero-stat-value');
+  if ('IntersectionObserver' in window && heroStats.length) {
+    const cntObs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          const el = e.target;
+          const text = el.textContent.trim();
+          const match = text.match(/^[\$]?([\d.]+)(M|K)?(\+)?/);
+          if (match) {
+            const num = parseFloat(match[1]);
+            const unit = match[2] || '';
+            const plus = match[3] || '';
+            const prefix = text.startsWith('$') ? '$' : '';
+            animateCount(el, 0, num, unit + plus, 1800);
+            el.dataset.prefix = prefix;
+          }
+          cntObs.unobserve(el);
+        }
+      });
+    }, { threshold: 0.5 });
+    heroStats.forEach(el => cntObs.observe(el));
+  }
+
+})();
+
+/* ── IVV: Contadores animados para .ivv-stat-num ── */
+(function() {
+    function ivvAnimateCounter(el) {
+        var target = parseInt(el.getAttribute('data-target') || el.textContent, 10);
+        var suffix = el.getAttribute('data-suffix') || '';
+        if (isNaN(target)) return;
+        var duration = 2000;
+        var start = Date.now();
+        function update() {
+            var elapsed = Date.now() - start;
+            var progress = Math.min(elapsed / duration, 1);
+            var ease = 1 - Math.pow(1 - progress, 3);
+            el.textContent = Math.round(ease * target).toLocaleString() + suffix;
+            if (progress < 1) requestAnimationFrame(update);
+        }
+        requestAnimationFrame(update);
+    }
+    if ('IntersectionObserver' in window) {
+        var ivvObs = new IntersectionObserver(function(entries) {
+            entries.forEach(function(e) {
+                if (e.isIntersecting) {
+                    ivvAnimateCounter(e.target);
+                    ivvObs.unobserve(e.target);
+                }
+            });
+        }, { threshold: 0.5 });
+        document.querySelectorAll('.ivv-stat-num').forEach(function(el) {
+            ivvObs.observe(el);
+        });
+    }
+})();
