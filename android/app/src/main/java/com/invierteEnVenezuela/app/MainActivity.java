@@ -6,13 +6,18 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
 
     @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (bridge != null && bridge.getWebView() != null && bridge.getWebView().canGoBack()) {
-                bridge.getWebView().goBack();
-                return true;
-            }
+    public void onStart() {
+        super.onStart();
+        if (bridge != null && bridge.getWebView() != null) {
+            bridge.getWebView().setOnKeyListener((view, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_BACK) {
+                    if (bridge.getWebView().canGoBack()) {
+                        bridge.getWebView().goBack();
+                        return true;
+                    }
+                }
+                return false;
+            });
         }
-        return super.onKeyDown(keyCode, event);
     }
 }
